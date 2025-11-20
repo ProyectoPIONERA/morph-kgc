@@ -8,16 +8,12 @@ RDF = Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#")
 
 OUTPUT_FILE = "resultado_final_matching.txt"
 
-
-# =========================================================
-#   QUERY ÚNICA — devuelve toda la info necesaria
-# =========================================================
+# === Query corregida unificada ===
 QUERY = """
-SELECT DISTINCT ?tm ?predicate ?predicateValue ?predType ?object ?objType ?template WHERE { 
+SELECT DISTINCT ?tm ?predicateValue ?predType ?object ?objType ?template WHERE { 
     ?tm rml:predicateObjectMap ?pom .
     
     ?pom rml:predicateMap ?pm .
-    ?pm ?pType ?predicate .
     ?pm ?predType ?predicateValue .
 
     OPTIONAL {
@@ -30,120 +26,76 @@ SELECT DISTINCT ?tm ?predicate ?predicateValue ?predType ?object ?objType ?templ
         ?sm rml:template ?template .
     }
 
-    FILTER(?pType IN (rml:constant, rml:template, rml:reference))
     FILTER(?predType IN (rml:constant, rml:template, rml:reference))
     FILTER(!bound(?object) || ?objType IN (rml:constant, rml:template, rml:reference))
 }
 """
 
 
-# =========================================================
-#   Helpers
-# =========================================================
-def template_to_example_uri(template: str) -> str:
-    return re.sub(r"\{[^}]+\}", "1", template)
+def normalize_type(value):
+    if value is None:
+        return "UNKNOWN"
+    return value.split("#")[-1] if "#" in value else value
 
 
-def match_uri_to_template(uri: str, template: str) -> bool:
-    regex = re.escape(template)
-    regex = re.sub(r"\\\{[^}]+\\\}", r"(.+)", regex)
-    return re.fullmatch(regex, uri) is not None
-
-
-
-# =========================================================
-#   MAIN
-# =========================================================
 if __name__ == "__main__":
 
     graph = Graph()
     graph.parse("example.ttl", format="turtle")
 
-    # Ejecutar solo UNA consulta
     rows = list(graph.query(QUERY, initNs={"rml": RML, "rr": RR}))
 
-    # ---- Preparar estructuras reutilizables ----
-    predicate_to_tm = []
-    subject_templates = {}
-    predicate_objects = {}
+    # Estructura final: TriplesMap → Subject + Predicates + Objects
+    triplesmap_data = {}
 
     for row in rows:
         tm = str(row.tm)
-        predicate = str(row.predicate)
-        predicate_value = str(row.predicateValue)
-        template = str(row.template) if row.template else None
+        predicate = str(row.predicateValue)
         object_val = str(row.object) if row.object else None
-        object_type = str(row.objType) if row.objType else None
+        template = str(row.template) if row.template else None
+        obj_type = normalize_type(str(row.objType)) if row.objType else None
 
-        # ---- 1) Predicates con TriplesMap ----
-        predicate_to_tm.append({"triplesMap": tm, "predicate": predicate_value})
+        if tm not in triplesmap_data:
+            triplesmap_data[tm] = {
+                "subject": template,
+                "predicates": {}
+            }
 
-        # ---- 2) Subject templates ----
-        if template:
-            subject_templates[tm] = template
-
-        # ---- 3) Group predicate-object ----
-        if predicate_value not in predicate_objects:
-            predicate_objects[predicate_value] = []
+        if predicate not in triplesmap_data[tm]["predicates"]:
+            triplesmap_data[tm]["predicates"][predicate] = []
 
         if object_val:
-            predicate_objects[predicate_value].append({
+            triplesmap_data[tm]["predicates"][predicate].append({
                 "object": object_val,
-                "type": object_type.split("#")[-1] if "#" in object_type else object_type
+                "type": obj_type
             })
 
-
-    # =========================================================
-    #   ESCRITURA EN ARCHIVO
-    # =========================================================
+    # ---- Escribir salida formateada ----
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
 
-        # ---- SECTION 1: Predicates + TMs ----
-        f.write("🔍 Predicados y TriplesMap asociados\n")
-        f.write("===================================\n\n")
-
-        for entry in predicate_to_tm:
-            f.write(f" ✔ TriplesMap: {entry['triplesMap']}\n")
-            f.write(f"    ↳ Predicate: {entry['predicate']}\n\n")
-
-
-        # ---- SECTION 2: Subject Templates ----
-        f.write("\n🔍 Subject Templates detectadas\n")
-        f.write("================================\n\n")
-
-        for tm, template in subject_templates.items():
-            f.write(f" ✔ {tm} → {template}\n")
-
-
-        # ---- SECTION 3: Matching Subject Templates ----
-        f.write("\n\n🔎 Matching automático entre Subject Templates\n")
-        f.write("==============================================\n")
-
-        templates_list = list(subject_templates.items())
-
-        for tm, template in templates_list:
-
-            test_uri = template_to_example_uri(template)
-            f.write(f"\n➡ URI generada: `{test_uri}` (desde: {template})\n")
-
-            for tm2, t2 in templates_list:
-                if match_uri_to_template(test_uri, t2):
-                    f.write(f"   ✓ MATCH → {t2} (TM: {tm2})\n")
-                else:
-                    f.write(f"   ✗ NO MATCH → {t2} (TM: {tm2})\n")
-
-
-        # ---- SECTION 4: Predicate → Object group ----
-        f.write("\n\n📌 Predicates y sus ObjectMaps asociados\n")
+        f.write("📌 AGRUPACIÓN POR TRIPLESMAP\n")
         f.write("===========================================\n\n")
 
-        for predicate, objects in predicate_objects.items():
-            f.write(f"🔹 Predicate: {predicate}\n")
+        for tm, entry in triplesmap_data.items():
+            f.write(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+            f.write(f"🔹 TriplesMap: {tm}\n")
 
-            for obj in objects:
-                f.write(f"   • {obj['object']}   ({obj['type']})\n")
+            if entry["subject"]:
+                f.write(f"    • SubjectMap → {entry['subject']}\n")
+            else:
+                f.write(f"    • SubjectMap → ❌ No definido\n")
 
-            f.write("\n----------------------------------------------------\n\n")
+            f.write("\n    Predicates:\n")
 
+            for pred, objects in entry["predicates"].items():
+                f.write(f"       🔸 {pred}\n")
+
+                if objects:
+                    for obj in objects:
+                        f.write(f"          ↳ Object: {obj['object']}  (type: {obj['type']})\n")
+                else:
+                    f.write("          ↳ ❌ No ObjectMap definido\n")
+
+            f.write("\n")
 
     print(f"\n📁 Archivo generado correctamente en: {OUTPUT_FILE}\n")
