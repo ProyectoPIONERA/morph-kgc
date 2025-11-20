@@ -13,16 +13,16 @@ OUTPUT_FILE = "resultado_final_matching.txt"
 #   QUERY ÚNICA — devuelve toda la info necesaria
 # =========================================================
 QUERY = """
-SELECT DISTINCT ?tm ?predicate ?predicateValue ?valueType ?object ?template WHERE { 
+SELECT DISTINCT ?tm ?predicate ?predicateValue ?predType ?object ?objType ?template WHERE { 
     ?tm rml:predicateObjectMap ?pom .
     
     ?pom rml:predicateMap ?pm .
     ?pm ?pType ?predicate .
-    ?pm ?valueType ?predicateValue .
+    ?pm ?predType ?predicateValue .
 
     OPTIONAL {
         ?pom rml:objectMap ?om .
-        ?om ?valueType ?object .
+        ?om ?objType ?object .
     }
 
     OPTIONAL {
@@ -31,7 +31,8 @@ SELECT DISTINCT ?tm ?predicate ?predicateValue ?valueType ?object ?template WHER
     }
 
     FILTER(?pType IN (rml:constant, rml:template, rml:reference))
-    FILTER(?valueType IN (rml:constant, rml:template, rml:reference))
+    FILTER(?predType IN (rml:constant, rml:template, rml:reference))
+    FILTER(!bound(?object) || ?objType IN (rml:constant, rml:template, rml:reference))
 }
 """
 
@@ -72,7 +73,7 @@ if __name__ == "__main__":
         predicate_value = str(row.predicateValue)
         template = str(row.template) if row.template else None
         object_val = str(row.object) if row.object else None
-        value_type = str(row.valueType)
+        object_type = str(row.objType) if row.objType else None
 
         # ---- 1) Predicates con TriplesMap ----
         predicate_to_tm.append({"triplesMap": tm, "predicate": predicate_value})
@@ -82,13 +83,13 @@ if __name__ == "__main__":
             subject_templates[tm] = template
 
         # ---- 3) Group predicate-object ----
-        if predicate not in predicate_objects:
-            predicate_objects[predicate] = []
+        if predicate_value not in predicate_objects:
+            predicate_objects[predicate_value] = []
 
         if object_val:
-            predicate_objects[predicate].append({
+            predicate_objects[predicate_value].append({
                 "object": object_val,
-                "type": value_type.split("#")[-1] if "#" in value_type else value_type
+                "type": object_type.split("#")[-1] if "#" in object_type else object_type
             })
 
 

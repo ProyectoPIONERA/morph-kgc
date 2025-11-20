@@ -68,14 +68,17 @@
 ----------------------------------------------------
 
 🔹 Predicate: http://swat.cse.lehigh.edu/onto/univ-bench.owl#publicationAuthor
+   • http://www.department{departmentnr}.university{universitynr}.edu/{graduatestudentname}   (http://w3id.org/rml/template)
 
 ----------------------------------------------------
 
 🔹 Predicate: http://swat.cse.lehigh.edu/onto/univ-bench.owl#name
+   • name   (http://w3id.org/rml/reference)
 
 ----------------------------------------------------
 
 🔹 Predicate: http://swat.cse.lehigh.edu/onto/univ-bench.owl#subOrganizationOf
+   • http://www.university{universitynr}.edu   (http://w3id.org/rml/template)
 
 ----------------------------------------------------
 
